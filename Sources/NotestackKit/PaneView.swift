@@ -1,13 +1,30 @@
 import SwiftUI
 
+/// Which direction a per-item transfer (ADR 0026) goes: leave the original in place and duplicate
+/// it elsewhere, or remove it from here and relocate it there. The same four `ItemTransferTarget`
+/// options apply either way -- "copy this to yesterday" is just as sensible as "move this to
+/// tomorrow."
 enum ItemTransferAction {
     case move, copy
 }
 
+/// Where a transferred item goes -- relative to the real current date (`AppController.
+/// resolveTransferDate`), not whichever day happens to be on screen. `.chooseDate` opens the same
+/// date-picker modal "Go to Date…" uses.
 enum ItemTransferTarget {
     case today, tomorrow, yesterday, chooseDate
 }
 
+/// The one sticky note this app ever shows (ADR 0022) -- one day's note at a time, navigable to
+/// any other day (ADR 0023: ◀/▶, scroll, ←/→, or a date picker), but still never more than one
+/// note on screen, and no sidebar, no other panes. Completing a task/checklist item copies it to
+/// a running Logbook file in addition to marking it done in place (ADR 0026) -- see `NotesStore.
+/// toggleItem`. An item (open or done) can also be copied or moved to another day via a
+/// hover-revealed menu (ADR 0026) -- there's still only ever one note open at a time, so this
+/// doesn't bring back a second visible pane, just a destination picked blind. No history-restore
+/// menu (the safety-net snapshot mechanism still runs, just silently -- see `AppController`).
+///
+/// Reordering (ADR 0012/0014/0015) uses hover-revealed ▲▼ buttons, not drag -- see ADR 0015.
 struct PaneView: View {
     let note: Note
     var readOnly = false
@@ -62,6 +79,11 @@ struct PaneView: View {
         .overlay(alignment: .bottomTrailing) { themeCycleButton }
         .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
         .shadow(color: accentColor.opacity(0.35), radius: 14)
+        // Navigating to a different day (ADR 0023) reuses this same view's @State (SwiftUI
+        // preserves it across a rootView update by identity, same reasoning as everywhere else
+        // this matters) -- but an in-progress edit/add-item draft was about a specific item in
+        // the *previous* day's note, and has no meaning once `note.id` changes out from under it.
+        // Reset rather than silently carry a stale draft into a different note.
         .onChange(of: "\(readOnly ? "Logbook" : period.stack)/\(note.id)") { _, _ in
             editingItemID = nil
             isAddingItem = false
@@ -75,13 +97,24 @@ struct PaneView: View {
         }
     }
 
+    // MARK: - Color (ADR 0008; cyberpunk accent glow, ADR 0020)
 
+    /// The one color per note that everything else here derives from: the neon border, the glow,
+    /// the unchecked-item icons -- a cyberpunk HUD reads by its accent color, not its fill, so
+    /// `note.color` doesn't change the note's *background* at all (always the same fixed dark
+    /// glass, `Theme.paneBase`), only this.
     private var accentColor: Color { note.color?.swiftUIColor ?? Theme.neutralGlow }
 
     private var textColor: Color { Theme.textPrimary }
 
     private var dimTextColor: Color { Theme.textDim }
 
+    /// Cycles the whole app's theme -- fill, default glow, text tones (ADR 0024) -- one click at
+    /// a time, wrapping back to the first after the last; no menu, just a button. Tucked into the
+    /// note's own corner (`.overlay(alignment: .bottomTrailing)` on the whole pane) rather than
+    /// the header, which is already fairly full of day-navigation/color/close controls. Small and
+    /// low-contrast on purpose -- a theme switcher is a "find it once, rarely touch it again"
+    /// control, not something that should compete for attention with the note's actual content.
     private var themeCycleButton: some View {
         Button(action: onCycleTheme) {
             Image(systemName: "paintpalette.fill")
@@ -93,6 +126,9 @@ struct PaneView: View {
         .help("Change theme (\(Theme.current.name))")
     }
 
+    /// A thin glowing bar across the very top of the card, inside the border -- the one purely
+    /// decorative HUD touch, cheap to render and the clearest single signal that this isn't a
+    /// plain pastel index card.
     private var scanline: some View {
         LinearGradient(
             colors: [accentColor.opacity(0.05), accentColor.opacity(0.9), accentColor.opacity(0.05)],
@@ -104,7 +140,14 @@ struct PaneView: View {
         .padding(.top, 8)
     }
 
+    // MARK: - Header: day navigation, title (doubles as the date picker), color, close
 
+    /// Day navigation (ADR 0023/0024): ◀/▶ flank the title directly, and the title itself --
+    /// the day's full date, e.g. "Thu, Nov 5, 2026" -- opens the date picker when tapped, rather
+    /// than a separate calendar icon off to the side. Scroll (`ClickThroughHostingView.
+    /// onNavigate`) and ←/→ (`AppWindow.onNavigate`) cover the same ground without needing any
+    /// on-screen control at all, so the arrows are a visible, discoverable affordance more than
+    /// the only way in.
     private var header: some View {
         HStack(alignment: .top, spacing: 4) {
             Button(action: onPreviousDay) {
@@ -157,6 +200,7 @@ struct PaneView: View {
         .help("Color")
     }
 
+    // MARK: - Add item (ADR 0009: collapsed to a small "+" until clicked)
 
     @ViewBuilder
     private var addItemRow: some View {
@@ -195,8 +239,10 @@ struct PaneView: View {
         guard !newItemDraft.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         onAddItem(newItemDraft)
         newItemDraft = "" // stays open (doesn't collapse) for the next item -- fast repeated
+        // capture: keep the field ready for repeated entry.
     }
 
+    // MARK: - Items (ADR 0007: kind; ADR 0009: editing existing text; ADR 0019: done-date)
 
     @ViewBuilder
     private func itemRow(_ item: NoteItem) -> some View {
@@ -233,6 +279,9 @@ struct PaneView: View {
                             itemDraft = shorthand(for: item)
                             editingItemID = item.id
                         }
+                    // Only shown once the item is actually done -- a stray doneDate left over from
+                    // hand-editing the raw shorthand (re-typing "()" over an already-"@done"-tagged
+                    // line without also removing the tag) shouldn't surface as if it still applied.
                     if item.done, let doneDate = item.doneDate {
                         Text(Self.doneDateFormatter.string(from: doneDate))
                             .font(.system(size: 10, design: .monospaced))
@@ -266,6 +315,11 @@ struct PaneView: View {
         return formatter
     }()
 
+    /// "Copy / move an open (or closed) task to another day" (ADR 0026) -- a hover-revealed
+    /// `Menu`, same idiom as the delete "×" and move ▲▼ buttons right next to it, grouped into
+    /// Move/Copy sections so both directions are reachable from one icon rather than two.
+    /// Available on every item regardless of done state -- deferring an unfinished task to
+    /// tomorrow and duplicating an already-done one onto another day are both reasonable.
     private func transferMenu(for item: NoteItem) -> some View {
         Menu {
             Section("Move") {
@@ -291,6 +345,9 @@ struct PaneView: View {
         .help("Copy or move to another day…")
     }
 
+    /// Plain button taps (ADR 0015), not a drag gesture -- swaps `item` with its immediate
+    /// neighbor and sends the whole resulting order to `onReorderItems`. Disabled instead of
+    /// hidden at either end of the list, so the row doesn't jump width depending on position.
     private func moveButtons(for item: NoteItem) -> some View {
         let ids = note.items.map(\.id)
         let index = ids.firstIndex(of: item.id) ?? 0
@@ -319,6 +376,8 @@ struct PaneView: View {
         onReorderItems(ids)
     }
 
+    /// Clearing the text entirely and pressing Return deletes the item, rather than being
+    /// silently rejected (ADR 0010).
     private func commitItemEdit(_ item: NoteItem) {
         let trimmed = itemDraft.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty {
@@ -329,6 +388,12 @@ struct PaneView: View {
         editingItemID = nil
     }
 
+    /// The shorthand form shown while editing -- includes done state (`(x)`/`[x]`, not just
+    /// `()`/`[]`) so resubmitting an edit *unchanged* doesn't silently uncheck an already-done
+    /// item, and (ADR 0019) includes the `@done(...)` tag too, for the same reason: a typo fix on
+    /// an already-done item shouldn't silently drop its done-date. `NotesStore.markdownLine(for:)`
+    /// just carries any trailing text through verbatim, so this round-trips correctly with no
+    /// special-casing needed on the write side.
     private func shorthand(for item: NoteItem) -> String {
         let doneTag = item.doneDate.map { " @done(\(Self.doneDateTagFormatter.string(from: $0)))" } ?? ""
         switch item.kind {

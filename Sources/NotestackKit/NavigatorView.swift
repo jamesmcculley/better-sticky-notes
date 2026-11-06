@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// A persistent child sticky; selecting a destination updates the main window immediately.
 struct NavigatorView: View {
     let date: Date
     let period: NotePeriod

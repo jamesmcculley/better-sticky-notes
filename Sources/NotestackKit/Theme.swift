@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// One self-contained color set for the whole note -- fill, default accent glow, and the two text
+/// tones that go with that fill (ADR 0024). Grouped together on purpose, not four independent
+/// globals: a light `paneBase` needs *dark* text to go with it, a dark one needs light text, and
+/// nothing enforces that pairing if each color is picked separately. Every field is a literal
+/// `Color`, never a system semantic color (`.primary`/`.secondary`/a system material) -- those
+/// resolve against the Mac's actual light/dark appearance, but this app's whole point here is
+/// that the *palette*, not the OS, decides what's light or dark.
 struct ThemePalette: Equatable {
     let name: String
     let paneBase: Color
@@ -8,8 +15,15 @@ struct ThemePalette: Equatable {
     let textDim: Color
 }
 
+/// Theme cycling (ADR 0024): a small button in the note's corner steps through `palettes` one at
+/// a time, "you can just click through the different themes" -- no menu, no picker, just a plain
+/// button that advances and wraps back to the first after the last. `currentIndex` persists in
+/// `UserDefaults` (a plain local preference, not a note -- `NotesStore`'s "files are the only
+/// source of truth" boundary is about note *content*, not app-level UI settings like this one),
+/// so the choice survives a quit/relaunch.
 enum Theme {
     static let palettes: [ThemePalette] = [
+        // Cyberpunk (ADR 0020, the original): near-black blue-violet glass, electric cyan glow.
         ThemePalette(
             name: "Cyberpunk",
             paneBase: Color(red: 0.055, green: 0.063, blue: 0.095),
@@ -17,6 +31,7 @@ enum Theme {
             textPrimary: Color(red: 0.92, green: 0.96, blue: 1.0),
             textDim: Color(red: 0.56, green: 0.65, blue: 0.76)
         ),
+        // Vaporwave: deep magenta-purple glass, hot pink glow.
         ThemePalette(
             name: "Vaporwave",
             paneBase: Color(red: 0.09, green: 0.05, blue: 0.12),
@@ -24,6 +39,7 @@ enum Theme {
             textPrimary: Color(red: 0.97, green: 0.93, blue: 1.0),
             textDim: Color(red: 0.68, green: 0.58, blue: 0.78)
         ),
+        // Matrix: near-black green-tinted glass, terminal-green glow.
         ThemePalette(
             name: "Matrix",
             paneBase: Color(red: 0.03, green: 0.05, blue: 0.03),
@@ -31,6 +47,7 @@ enum Theme {
             textPrimary: Color(red: 0.85, green: 1.0, blue: 0.88),
             textDim: Color(red: 0.45, green: 0.65, blue: 0.48)
         ),
+        // Synthwave: deep navy glass, sunset orange-pink glow.
         ThemePalette(
             name: "Synthwave",
             paneBase: Color(red: 0.06, green: 0.05, blue: 0.14),
@@ -38,6 +55,9 @@ enum Theme {
             textPrimary: Color(red: 0.98, green: 0.94, blue: 0.92),
             textDim: Color(red: 0.65, green: 0.55, blue: 0.62)
         ),
+        // Classic Paper: a callback to the original pre-cyberpunk look -- warm cream paper, dark
+        // ink text (the one palette here that's light, not dark -- textPrimary/textDim flip to
+        // dark tones to match, same "grouped together on purpose" reasoning as the doc comment).
         ThemePalette(
             name: "Classic Paper",
             paneBase: Color(red: 1.0, green: 0.95, blue: 0.78),
@@ -46,6 +66,9 @@ enum Theme {
             textDim: Color(red: 0.45, green: 0.38, blue: 0.28)
         ),
 
+        // -- 30 more (ADR 0025) -- mostly dark (same "fill is dark glass, glow is the accent"
+        // shape as the first four above), with a handful of light ones mixed in (same
+        // dark-text-on-light-fill flip "Classic Paper" already established) for real variety.
 
         ThemePalette(
             name: "Midnight Ocean",
@@ -216,6 +239,7 @@ enum Theme {
             textDim: Color(red: 0.62, green: 0.50, blue: 0.62)
         ),
 
+        // Light palettes -- same dark-text-on-light-fill flip as "Classic Paper" above.
         ThemePalette(
             name: "Dawn",
             paneBase: Color(red: 1.0, green: 0.90, blue: 0.85),
@@ -278,6 +302,8 @@ enum Theme {
         return current
     }
 
+    // Convenience accessors so call sites read `Theme.paneBase` etc. exactly as they did when
+    // these were fixed constants (ADR 0020) -- now just forwarding to the current palette.
     static var paneBase: Color { current.paneBase }
     static var neutralGlow: Color { current.neutralGlow }
     static var textPrimary: Color { current.textPrimary }

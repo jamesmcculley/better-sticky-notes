@@ -3,6 +3,9 @@ import Foundation
 import SwiftUI
 @testable import NotestackKit
 
+// A framework-free stand-in for a test suite (see Package.swift's comment and AGENTS.md trap 2):
+// this toolchain has neither XCTest nor Swift Testing available without full Xcode. `swift run
+// notestackChecks` is the verify command until that changes.
 
 var failures = 0
 
@@ -68,6 +71,7 @@ do {
     check("notes sorted by filename", store.loadNotes(stack: main).map(\.id) == ["A.md", "B.md"])
 }
 
+// -- Toggling items + done-date (ADR 0007, reversed from Logbook back to in-place in ADR 0019) --
 
 do {
     let (store, dir) = makeStore()
@@ -125,6 +129,7 @@ do {
          !item.done && item.title == "milk" && item.doneDate != nil)
 }
 
+// -- renaming -------------------------------------------------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -143,6 +148,7 @@ do {
     check("renameNote inserts a heading when there wasn't one", store.loadNotes(stack: main)[0].title == "Shopping")
 }
 
+// -- adding items -----------------------------------------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -162,6 +168,7 @@ do {
          store.loadNotes(stack: main)[0].items.map(\.title) == ["milk", "eggs"])
 }
 
+// -- Editing existing items (ADR 0009) -----------------------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -203,6 +210,7 @@ do {
          after.title == "second, edited" && after.done && after.doneDate != nil)
 }
 
+// -- Deleting items (ADR 0010) --------------------------------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -223,6 +231,7 @@ do {
     check("deleting an item doesn't touch the title", note.title == "Today")
 }
 
+// -- Trash (ADR 0011) ------------------------------------------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -260,7 +269,8 @@ do {
     write(dir, "Today.md", "# Today\n\n- [ ] first\n- [ ] second\n")
     let items = store.loadNotes(stack: main)[0].items
     store.deleteItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: items[0])
-    store.deleteItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: items[1])
+    let second = store.loadNotes(stack: main)[0].items.first { $0.title == "second" }!
+    store.deleteItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: second)
     check("multiple deletions each land their own Trash entry", store.listTrash().count == 2)
 
     store.emptyTrash()
@@ -272,6 +282,7 @@ do {
          .appendingPathComponent(UUID().uuidString)).listTrash().isEmpty)
 }
 
+// -- Reordering items (ADR 0012) ------------------------------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -313,6 +324,7 @@ do {
     check("the order is actually swapped", note.items.map(\.title) == ["second", "first"])
 }
 
+// -- Item kinds: task/checklist/bullet (ADR 0007) -----------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -333,6 +345,7 @@ do {
     check("[x] shorthand makes a done checklist line", NotesStore.markdownLine(for: "[x] already done") == "- [x] already done")
 }
 
+// -- Note color (ADR 0008) -----------------------------------------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -393,6 +406,7 @@ do {
     check("both notes exist", store.loadNotes(stack: main).count == 2)
 }
 
+// -- Multiple stacks (now an internal mechanism, not a user-facing feature -- ADR 0019) --------
 
 do {
     let (store, _) = makeStore()
@@ -439,6 +453,7 @@ do {
     check("both notes exist in the destination", store.loadNotes(stack: "Archive").count == 2)
 }
 
+// -- ensureNote (ADR 0019) ------------------------------------------------------------------------
 
 do {
     let (store, _) = makeStore()
@@ -458,6 +473,7 @@ do {
     check("ensureNote leaves an existing file completely untouched", note?.items.map(\.title) == ["already here"])
 }
 
+// -- moveItem: moving a single item between notes (ADR 0019) -------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -497,6 +513,7 @@ do {
          destination?.items.map(\.title) == ["existing", "first"])
 }
 
+// -- copyItem: moveItem's non-destructive sibling (ADR 0026) -------------------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -536,6 +553,7 @@ do {
          destination?.items.map(\.title) == ["existing", "existing"])
 }
 
+// -- Logbook: a copy of every completed task, with its source note and done-date (ADR 0026) ------
 
 do {
     let (store, dir) = makeStore()
@@ -572,6 +590,7 @@ do {
     write(dir, "Today.md", "# Today\n\n- [ ] first\n- [ ] second\n")
     let items = store.loadNotes(stack: main)[0].items
     store.toggleItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: items[0])
+    // Re-read fresh before the second toggle -- same reasoning as every other multi-toggle test here.
     let second = store.loadNotes(stack: main)[0].items.first { $0.title == "second" }!
     store.toggleItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: second)
 
@@ -588,6 +607,7 @@ do {
     check("toggling a bullet (a no-op) never touches the Logbook", store.logbookContents().isEmpty)
 }
 
+// -- NoteCadence: day/week filenames and titles (ADR 0019) ----------------------------------------
 
 do {
     let components = DateComponents(year: 2026, month: 11, day: 5) // a Thursday
@@ -614,6 +634,7 @@ do {
     check("two dates in the same week resolve to the same week filename", id1 == id2)
 }
 
+// -- History: safety snapshots of externally-made changes (ADR 0021) -----------------------------
 
 do {
     let (store, dir) = makeStore()
@@ -658,6 +679,7 @@ do {
          store.listHistory(stack: main, noteID: "Today.md").count == 1)
 }
 
+// -- Theme cycling (ADR 0024) ---------------------------------------------------------------------
 
 do {
     check("every palette has a unique name", Set(Theme.palettes.map(\.name)).count == Theme.palettes.count)
@@ -665,6 +687,11 @@ do {
     check("every added theme is actually present (5 original + 30 more, ADR 0025)", Theme.palettes.count == 35)
 }
 
+// A real contrast sanity check, not just "does it compile" -- 35 hand-typed palettes is real
+// transcription risk (a `textPrimary` that was never flipped to match a light `paneBase`, say),
+// and this is the one thing about color correctness that's actually verifiable without a screen:
+// relative luminance (ITU-R BT.601 weights) should differ enough between a palette's fill and
+// its own primary text color that the two aren't close to indistinguishable.
 func luminance(_ color: Color) -> Double {
     guard let rgb = NSColor(color).usingColorSpace(.deviceRGB) else { return 0.5 }
     return 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
@@ -689,6 +716,7 @@ do {
     check("cycling all the way around wraps back to the first", Theme.current.name == Theme.palettes[0].name)
 }
 
+// Completion timestamps, legacy removal, and Logbook history tracking.
 do {
     let (store, dir) = makeStore()
     defer { try? FileManager.default.removeItem(at: dir) }
@@ -709,6 +737,7 @@ do {
     check("legacy date-only completion removes its Logbook entry", store.loadLogbook().items.isEmpty)
 }
 
+// Configurable root persists without moving or merging files.
 do {
     let suite = "notestackChecks.location." + UUID().uuidString
     let defaults = UserDefaults(suiteName: suite)!
@@ -736,6 +765,7 @@ do {
     }
 }
 
+// Weekly navigation across midnight/year boundaries and independent storage.
 do {
     let sunday = NoteCadence.date(fromFilename: "2027-01-03.md")!
     let monday = NoteCadence.date(fromFilename: "2027-01-04.md")!
@@ -759,6 +789,73 @@ do {
     check("weekly reopening removes completion from Logbook", store.loadLogbook().items.isEmpty)
     store.copyItem(store.loadNotes(stack: "Weekly")[0].items[0], fromStack: "Weekly", fromNoteID: id, toStack: "Daily", toNoteID: id, toNoteTitle: "Monday")
     check("weekly item can be copied to a same-named daily file", store.loadNotes(stack: "Daily")[0].items[0].title == "weekly goal")
+}
+
+
+// Regression coverage for the public release audit findings.
+do {
+    let (store, dir) = makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    write(dir, "Today.md", "# Today\n- [ ] original\n- [ ] later\n")
+    let stale = store.loadNotes(stack: main)[0].items[0]
+    write(dir, "Today.md", "# Today\n- [ ] inserted externally\n- [ ] original\n- [ ] later\n")
+    store.deleteItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: stale)
+    check("stale delete leaves externally inserted item untouched", store.loadNotes(stack: main)[0].items.map(\.title) == ["inserted externally", "original", "later"])
+}
+do {
+    let (store, dir) = makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    write(dir, "Today.md", "# Today\n- [ ] original\n")
+    let stale = store.loadNotes(stack: main)[0].items[0]
+    write(dir, "Today.md", "# Today\n- [ ] inserted externally\n- [ ] original\n")
+    store.editItem(stack: main, noteID: "Today.md", item: stale, text: "[] overwritten")
+    store.toggleItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: stale)
+    check("stale edit and toggle are rejected", store.loadNotes(stack: main)[0].items.map(\.title) == ["inserted externally", "original"] && store.logbookContents().isEmpty)
+}
+do {
+    let (store, dir) = makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    write(dir, "Today.md", "# Today\n- [ ] valuable task\n")
+    write(dir, "Blocked", "file blocks destination directory")
+    let item = store.loadNotes(stack: main)[0].items[0]
+    let moved = store.moveItem(item, fromStack: main, fromNoteID: "Today.md", toStack: "Blocked", toNoteID: "Tomorrow.md", toNoteTitle: "Tomorrow")
+    check("failed move leaves source task intact", !moved && store.loadNotes(stack: main)[0].items.map(\.title) == ["valuable task"])
+}
+do {
+    let (store, dir) = makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    write(dir, "Today.md", "# Today\n- [ ] valuable task\n")
+    let entryID = store.deleteItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: store.loadNotes(stack: main)[0].items[0])!
+    try! FileManager.default.removeItem(at: dir.appendingPathComponent("Today.md"))
+    try! FileManager.default.createDirectory(at: dir.appendingPathComponent("Today.md"), withIntermediateDirectories: true)
+    check("failed restore reports failure and keeps Trash copy", !store.restoreFromTrash(entryID) && store.listTrash().count == 1)
+}
+do {
+    let (store, dir) = makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    write(dir, "Today.md", "# Today\n- ( ) finish report\n")
+    var item = store.loadNotes(stack: main)[0].items[0]
+    store.toggleItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: item)
+    item = store.loadNotes(stack: main)[0].items[0]
+    let line = try! String(contentsOf: dir.appendingPathComponent("Today.md"), encoding: .utf8).components(separatedBy: "\n")[1]
+    store.editItem(stack: main, noteID: "Today.md", item: item, text: String(line.dropFirst(2)).replacingOccurrences(of: "finish report", with: "renamed report"))
+    let edited = store.loadNotes(stack: main)[0].items[0]
+    check("renaming a completed task updates its Logbook entry", store.loadLogbook().items.map(\.title) == ["renamed report — Today"])
+    store.toggleItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: edited)
+    check("reopening a renamed task removes its Logbook entry", store.loadLogbook().items.isEmpty)
+}
+do {
+    let (store, dir) = makeStore()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    write(dir, "Today.md", "# Today\n- ( ) finish report\n")
+    var item = store.loadNotes(stack: main)[0].items[0]
+    store.toggleItem(stack: main, noteID: "Today.md", noteTitle: "Today", item: item)
+    item = store.loadNotes(stack: main)[0].items[0]
+    check("completed task moves successfully", store.moveItem(item, fromStack: main, fromNoteID: "Today.md", toStack: main, toNoteID: "Tomorrow.md", toNoteTitle: "Tomorrow"))
+    let moved = store.loadNotes(stack: main).first { $0.id == "Tomorrow.md" }!.items[0]
+    check("moving a completed task updates Logbook association", store.loadLogbook().items.map(\.title) == ["finish report — Tomorrow"])
+    store.toggleItem(stack: main, noteID: "Tomorrow.md", noteTitle: "Tomorrow", item: moved)
+    check("reopening a moved completed task removes its Logbook entry", store.loadLogbook().items.isEmpty)
 }
 
 print(failures == 0 ? "\nAll checks passed." : "\n\(failures) check(s) failed.")
